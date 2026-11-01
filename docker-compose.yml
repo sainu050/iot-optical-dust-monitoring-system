@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  dust-backend:
+    build: .
+    container_name: iot_dust_system
+    ports:
+      - "8000:8000"
+    volumes:
+      - sensor_storage:/app/data
+    restart: unless-stopped
+
+volumes:
+  sensor_storage:

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Dust & Particulate Monitoring System</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-main: #0b1120;
+      --card-bg: #1e293b;
+      --border-color: #334155;
+      --accent-blue: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+      margin: 0;
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+
+    .header-left h1 {
+      margin: 0 0 6px 0;
+      font-size: 24px;
+      letter-spacing: -0.5px;
+    }
+
+    .header-left p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .device-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border-color);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #4ade80;
+      box-shadow: 0 0 8px #4ade80;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    }
+
+    .card h3 {
+      margin: 0 0 12px 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+    }
+
+    .metric {
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--accent-blue);
+      line-height: 1.1;
+    }
+
+    .metric-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .chart-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .chart-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    th {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    }
+
+    tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-left">
+      <h1>IoT Dust & Particulate Monitoring System</h1>
+      <p>Optical Dust Sensor (GP2Y1014AU0F) • ESP32 Edge Telemetry • Docker & SQLite</p>
+    </div>
+    <div class="device-badge">
+      <span class="status-dot" id="networkDot"></span>
+      <span>Sensor Node: <b style="color: #f8fafc;" id="nodeName">ESP32_Dust_01</b></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Dust Density (Concentration)</h3>
+      <div class="metric" id="currentDust">-- µg/m³</div>
+      <div class="metric-sub">Calibrated particulate concentration</div>
+    </div>
+
+    <div class="card">
+      <h3>Phototransistor Output</h3>
+      <div class="metric" id="currentVoltage">-- V</div>
+      <div class="metric-sub">Analog output voltage (Vo)</div>
+    </div>
+
+    <div class="card">
+      <h3>Dust Exposure Level</h3>
+      <div class="metric" id="dustSeverity" style="font-size: 26px;">Analyzing...</div>
+      <div class="metric-sub" id="dustActionHint">Awaiting optical data stream</div>
+    </div>
+  </div>
+
+  <div class="chart-container">
+    <div class="chart-header">
+      <h3>Real-Time Dust Concentration Trend</h3>
+      <span style="font-size: 12px; color: var(--text-muted);">Sampling rate: 2s interval</span>
+    </div>
+    <canvas id="dustChart" height="85"></canvas>
+  </div>
+
+  <div class="table-container">
+    <h3 style="margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted);">Recent Telemetry Logs</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Sensor Node</th>
+          <th>Optical Output (Vo)</th>
+          <th>Dust Density (µg/m³)</th>
+          <th>Particulate Level</th>
+        </tr>
+      </thead>
+      <tbody id="telemetryRows">
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-muted);">Waiting for telemetry stream...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const ctx = document.getElementById('dustChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Dust Concentration (µg/m³)',
+          data: [],
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.12)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#38bdf8'
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { 
+            grid: { color: '#1e293b' }, 
+            ticks: { color: '#94a3b8', maxTicksLimit: 12 } 
+          },
+          y: { 
+            grid: { color: '#334155' }, 
+            ticks: { color: '#94a3b8' }, 
+            beginAtZero: true,
+            suggestedMax: 150
+          }
+        }
+      }
+    });
+
+    function getDustLevel(density) {
+      if (density < 25) {
+        return { label: 'Low / Clean', color: '#4ade80', desc: 'Minimal ambient dust' };
+      } else if (density <= 75) {
+        return { label: 'Normal Ambient', color: '#38bdf8', desc: 'Typical indoor dust level' };
+      } else if (density <= 150) {
+        return { label: 'Moderate Dust', color: '#facc15', desc: 'Slight particulate accumulation' };
+      } else if (density <= 300) {
+        return { label: 'High Dust', color: '#fb923c', desc: 'Concentrated dust or smoke' };
+      } else {
+        return { label: 'Severe / Heavy Dust', color: '#f87171', desc: 'Dense particulate chamber trigger' };
+      }
+    }
+
+    async function fetchDustTelemetry() {
+      try {
+        const response = await fetch('/api/sensor-data/latest?limit=15');
+        const data = await response.json();
+        
+        if (data.length > 0) {
+          const latest = data[data.length - 1];
+          const info = getDustLevel(latest.dust_density);
+
+          document.getElementById('currentDust').innerText = `${latest.dust_density.toFixed(2)} µg/m³`;
+          document.getElementById('currentVoltage').innerText = `${latest.voltage.toFixed(2)} V`;
+          
+          const severityElem = document.getElementById('dustSeverity');
+          severityElem.innerText = info.label;
+          severityElem.style.color = info.color;
+          document.getElementById('dustActionHint').innerText = info.desc;
+
+          chart.data.labels = data.map(d => d.timestamp);
+          chart.data.datasets[0].data = data.map(d => d.dust_density);
+          chart.update();
+
+          // Populate telemetry table
+          const tbody = document.getElementById('telemetryRows');
+          tbody.innerHTML = '';
+          const tableData = [...data].reverse().slice(0, 7);
+          tableData.forEach(row => {
+            const status = getDustLevel(row.dust_density);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${row.timestamp}</td>
+              <td>${row.device_id}</td>
+              <td>${row.voltage.toFixed(2)} V</td>
+              <td><b>${row.dust_density.toFixed(2)}</b></td>
+              <td><span style="color: ${status.color}; font-weight: 600;">${status.label}</span></td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+      } catch (err) {
+        console.error("Telemetry fetch error:", err);
+      }
+    }
+
+    setInterval(fetchDustTelemetry, 2000);
+    fetchDustTelemetry();
+  </script>
+</body>
+</html>
