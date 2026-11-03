@@ -253,6 +253,49 @@
       }
     });
 
+    // ------------------- WEB AUDIO ALERT SYSTEM -------------------
+    let audioCtx = null;
+    let lastAlertSoundTime = 0;
+    const DUST_ALERT_THRESHOLD = 75.0; // Trigger alert if dust density > 75 µg/m³
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // Unlocks browser audio policy on first user interaction
+    window.addEventListener('click', initAudio, { once: true });
+    window.addEventListener('touchstart', initAudio, { once: true });
+
+    function playAlertBeep(frequency = 880, duration = 0.35) {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+
+        gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+      } catch (err) {
+        console.warn("Audio alert failed:", err);
+      }
+    }
+    // -------------------------------------------------------------
+
     function getDustLevel(density) {
       if (density < 25) {
         return { label: 'Low / Clean', color: '#4ade80', desc: 'Minimal ambient dust' };
@@ -284,6 +327,15 @@
           severityElem.style.color = info.color;
           document.getElementById('dustActionHint').innerText = info.desc;
 
+          // Sound alarm if reading exceeds threshold
+          if (latest.dust_density > DUST_ALERT_THRESHOLD) {
+            const now = Date.now();
+            if (now - lastAlertSoundTime > 5000) {
+              playAlertBeep(920, 0.4);
+              lastAlertSoundTime = now;
+            }
+          }
+
           chart.data.labels = data.map(d => d.timestamp);
           chart.data.datasets[0].data = data.map(d => d.dust_density);
           chart.update();
@@ -312,6 +364,6 @@
 
     setInterval(fetchDustTelemetry, 2000);
     fetchDustTelemetry();
-  </script>
+</script>
 </body>
 </html>

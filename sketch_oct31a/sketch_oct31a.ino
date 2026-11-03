@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 // ====================================================================
 // Course: 24MCAT213 - INTERNET OF THINGS | Amal Jyothi College of Engineering
@@ -12,7 +13,7 @@ const char* ssid     = "Nothing Phone (3a)_3722";
 const char* password = "netveno?";
 
 // --- Docker Backend Server Endpoint ---
-const char* serverUrl = "http://10.188.223.119:8000/api/sensor-data";
+const char* serverUrl = "https://iot-optical-dust-monitoring-system.onrender.com/api/sensor-data";
 const char* deviceId  = "ESP32_Dust_01";
 
 // --- Pin Definitions for Sharp GP2Y1014AU0F ---
@@ -109,9 +110,13 @@ void loop() {
     Serial.printf("[Sensor] Vo: %.2f V | Dust Density: %.2f ug/m3\n", 
                   reading.voltage, reading.dustDensity);
 
+    // Initialize TLS/SSL client for HTTPS connections
+    WiFiClientSecure client;
+    client.setInsecure(); // Skip root CA certificate verification for Render
+
     HTTPClient http;
-    http.begin(serverUrl);
-    http.setTimeout(4000);
+    http.begin(client, serverUrl); // Connect using the secure client
+    http.setTimeout(10000);        // Extended to 10s to accommodate Render free-tier cold starts
     http.addHeader("Content-Type", "application/json");
 
     // Construct telemetry JSON payload
